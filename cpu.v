@@ -16,7 +16,7 @@
 // MUL	1010; multiply
 // MOV	1011; copy
 //
-// Multi-BYTE commands; Currently BR is the only multi-byte command to function properly
+// Multi-BYTE commands; Currently LOD and SAV do not function properly
 //
 // BR	XXXX1100 ZZZZZZZZ(address); branches the program to address
 // CMP	ZZ(a)ZZ(b)1101 ZZ(condition #1)ZZ(condition #2)ZZ(conditio #3)XX (ZZZZZZZZ (ZZZZZZZ (ZZZZZZZZ)?)?)? (addresses); compares a to b and branches to the true condition's address or falls through; conditions are 01(Equal), 10(greater than), 11(less than); the addresses' are ommitable if there's no condition
@@ -70,7 +70,7 @@ module memram(by, selby, write, writeby);
 
 	always @(selby) begin
 		by = mem[selby];
-		$display("ram=%b",by);
+		$display("ram[%b]=%b",selby,by);
 	end
 	always @(posedge write) begin
 		$display("setram=%b",writeby);
@@ -97,10 +97,13 @@ module memhd(by, selby);
 		mem[6] = 8'b00011010; // MUL R1, R2
 		mem[7] = 8'b01001010; // Mul R2, R1
 		mem[8] = 8'b00010010; // INC R2
-		mem[9] = 8'b00001100; // BR 12
-		mem[10] = 8'b0001100; // ^12
-		mem[11] = 8'b11111111; // gibberish
-		mem[12] = 8'b00000000; // HALT
+		mem[9] = 8'b00011101; // CMP R1, R2
+		mem[10] = 8'b01000000; // ^BEQ 15
+		mem[11] = 8'b00001111; // ^15
+		mem[12] = 8'b00001100; // BR 8
+		mem[13] = 8'b00001000; // ^8
+		mem[14] = 8'b11111111; // gibberish
+		mem[15] = 8'b00000000; // HALT
 		// fibs
 /*		mem[0] = 8'b00000001; // CLR R1
 		mem[1] = 8'b00010001; // CLR R2
@@ -108,8 +111,8 @@ module memhd(by, selby);
 		mem[3] = 8'b00010010; // INC R2
 		mem[4] = 8'b01011111; // SAV R2, R3
 		mem[5] = 8'b10000000; // ^R3
-		mem[6] = 8'b10111110; // LOD R4,14
-		mem[7] = 8'b00001110; // ^14
+		mem[6] = 8'b10111110; // LOD R4,20
+		mem[7] = 8'b00010100; // ^20
 		mem[8] = 8'b00011000; // ADD R2,R1
 		mem[9] = 8'b01001110; // LOD R1,R3
 		mem[10] = 8'b10000000; // ^R3
@@ -117,10 +120,10 @@ module memhd(by, selby);
 		mem[12] = 8'b01011111; // SAV R2,R3
 		mem[13] = 8'b10000000; // ^R3
 		mem[14] = 8'b10111101; // CMP R3,R4
-		mem[15] = 8'b01000000; // ^BEQ 13
-		mem[16] = 8'b00001101; // ^13
-		mem[17] = 8'b00001100; // BR 6
-		mem[18] = 8'b00000110; // ^6
+		mem[15] = 8'b01000000; // ^BEQ 19
+		mem[16] = 8'b00010011; // ^19
+		mem[17] = 8'b00001100; // BR 8
+		mem[18] = 8'b00001000; // ^8
 		mem[19] = 8'b00000000; // HALT
 		mem[20] = 8'b00010100; // 20*/
 	end
@@ -148,8 +151,8 @@ module regs(one, sel1, two, sel2, write, writesel, writeby);
 /*		$display("reg00 = %b",a);
 		$display("reg01 = %b",b);
 		$display("reg10 = %b",c);
-		$display("reg11 = %b",d);*/
-	end
+		$display("reg11 = %b",d);
+*/	end
 	always @(posedge write) begin 
 		if(writesel==0) begin
 			a = writeby;
@@ -205,209 +208,228 @@ module mux(write, writeby, writesel, ramwrite, ramsel, ramby, ramwriteby, skipco
 	input [7:0] incout, decout, notout, andout, orout, xorout, addout, subout, mulout, divout;
 
 	always @(posedge clk) begin
-		assign write = 0;
-		assign countwrite = 0;
-		assign ramwrite = 0;
+		write = 0;
+		countwrite = 0;
+		ramwrite = 0;
 
 		if(br==1) begin
-			assign countwrite = 1;
-			assign countwriteby = by;
-			assign br = 0;
+			countwriteby = by;
+			countwrite = 1;
+			br = 0;
 		end
 		else if(cmp==1) begin
-			if(reg1>0) begin
-				assign b1 = reg1;
+			$display("CMP=%b",by);
+			if(reg1==1 || reg1==2 || reg1==3) begin
+//				$display("!%b",reg1);
+				b1 = reg1;
 			end
-			if(reg2>0) begin
-				assign b2 = reg2;
+			if(reg2==1 || reg2==2 || reg2==3) begin
+//				$display("!!%b",reg2);
+				b2 = reg2;
 			end
-			if(cmd>3) begin
-				assign b3 = cmd-3;
+			if(cmd==4) begin
+//				$display("!!!%b",cmd);
+				b3 = 1;
 			end
-			assign cmp = 0;
+			else if(cmd==8) begin
+//				$display("!!!%b",cmd);
+				b3 = 2;
+			end
+			else if(cmd==12) begin
+//				$display("!!!%b",cmd);
+				b3 = 3;
+			end
+			cmp = 0;
 		end
 		else if(b1==1) begin // BEQ
 			if(cmpval==1) begin
-				countwrite = 1;
+				$display("BEQ");
 				countwriteby = by;
-				assign b1 = 0;
-				assign b2 = 0;
-				assign b3 = 0;
+				countwrite = 1;
+				b1 = 0;
+				b2 = 0;
+				b3 = 0;
 			end
 			else begin
-				assign b1 = b2;
-				assign b2 = b3;
-				assign b3 = 0;
+				b1 = b2;
+				b2 = b3;
+				b3 = 0;
 			end
 		end
 		else if(b1==2) begin // BHI
 			if(cmpval==2) begin
-				countwrite = 1;
+				$display("BHI");
 				countwriteby = by;
-				assign b1 = 0;
-				assign b2 = 0;
-				assign b3 = 0;
+				countwrite = 1;
+				b1 = 0;
+				b2 = 0;
+				b3 = 0;
 			end
 			else begin
-				assign b1 = b2;
-				assign b2 = b3;
-				assign b3 = 0;
+				b1 = b2;
+				b2 = b3;
+				b3 = 0;
 			end
 		end
 		else if(b1==3) begin // BLO
 			if(cmpval==3) begin
-				countwrite = 1;
+				$display("BLO");
 				countwriteby = by;
-				assign b1 = 0;
-				assign b2 = 0;
-				assign b3 = 0;
+				countwrite = 1;
+				b1 = 0;
+				b2 = 0;
+				b3 = 0;
 			end
 			else begin
-				assign b1 = b2;
-				assign b2 = b3;
-				assign b3 = 0;
+				b1 = b2;
+				b2 = b3;
+				b3 = 0;
 			end
 		end
 		else if(sav==1) begin
 			if(~lsreg) begin
-				$display("actually saving to %b", by);
-				assign ramsel = by;
+//				$display("actually saving to %b", by);
+				ramsel = by;
 			end
 			else begin
-				$display("actually saving to R%b = %b", reg1, rega);
-				assign ramsel = rega;
+//				$display("actually saving to R%b = %b", reg1, rega);
+				ramsel = rega;
 			end
-			assign ramwrite = 1;
-			assign sav = 0;
+			ramwrite = 1;
+			sav = 0;
 		end
 		else if(lod==1) begin
-			assign skipcount = 1;
-			assign counterswap = count;
+			counterswap = count;
 			if(lsreg==1) begin
-				assign countwriteby = rega;
+//				$display("actually reading from R%b = %b", reg1, rega);
+				countwriteby = rega;
 			end
 			else begin
-				assign countwriteby = by;
+//				$display("actually reading from %b", by);
+				countwriteby = by;
 			end
-			assign ramsel = by;
-			assign lod = 0;
+			ramsel = by;
+			lod = 0;
+			countwrite = 1;
+			skipcount = 1;
 		end
 		else if(skipcount==1) begin
 			if(lodhd==1) begin
-				assign writeby = by;
+				writeby = by;
 			end
 			else begin
-				assign writeby = ramby;
+				writeby = ramby;
 			end
-			assign write = 1;
-			assign skipcount = 0;
+			write = 1;
+			skipcount = 0;
 		end
 		else begin
-			assign writesel = reg2;
+			writesel = reg2;
 			if(cmd==0) begin
-				assign halt = 1;
+				halt = 1;
 				$display("HALT");
 			end
 			if(cmd==1) begin // CLR
-				assign writeby = 0;
-				assign write = 1;
+				writeby = 0;
+				write = 1;
 				$display("CLR");
 			end
 			if(cmd==2) begin // INC
-				assign writeby = incout;
-				assign write = 1;
+				writeby = incout;
+				write = 1;
 				$display("INC");
 			end
 			if(cmd==3) begin // DEC
-				assign writeby = decout;
-				assign write = 1;
+				writeby = decout;
+				write = 1;
 				$display("DEC");
 			end
 			if(cmd==4) begin // NOT
-				assign writeby = notout;
-				assign write = 1;
+				writeby = notout;
+				write = 1;
 				$display("NOT");
 			end
 			if(cmd==5) begin // AND
-				assign writeby = andout;
-				assign write = 1;
+				writeby = andout;
+				write = 1;
 				$display("AND");
 			end
 			if(cmd==6) begin // OR
-				assign writeby = orout;
-				assign write = 1;
+				writeby = orout;
+				write = 1;
 				$display("OR");
 			end
 			if(cmd==7) begin // XOR
-				assign writeby = xorout;
-				assign write = 1;
+				writeby = xorout;
+				write = 1;
 				$display("XOR");
 			end
 			if(cmd==8) begin // ADD
-				assign writeby = addout;
-				assign write = 1;
+				writeby = addout;
+				write = 1;
 				$display("ADD");
 			end
 			if(cmd==9) begin // SUB
-				assign writeby = subout;
-				assign write = 1;
+				writeby = subout;
+				write = 1;
 				$display("SUB");
 			end
 			if(cmd==10) begin // MUL
-				assign writeby = mulout;
-				assign write = 1;
+				writeby = mulout;
+				write = 1;
 				$display("MUL");
 			end
 			if(cmd==11) begin // MOV
-				assign writeby = rega;
-				assign write = 1;
+				writeby = rega;
+				write = 1;
 				$display("MOV");
 			end
 			if(cmd==12) begin // BR
-				assign write = 0;
-				assign br = 1;
+				write = 0;
+				br = 1;
 				$display("BR");
 			end
 			if(cmd==13) begin // CMP
-				assign write = 0;
-				assign cmp = 1;
-				assign cmpval = cmpout;
+				write = 0;
+				cmp = 1;
+				cmpval = cmpout;
 				$display("CMP");
 			end
 			if(cmd==14) begin // LOD
-				assign write = 0;
-				assign lod = 1;
+				write = 0;
+				lod = 1;
 				if(reg1==0) begin
-					assign lodhd = 0;
-					assign lsreg = 0;
+					lodhd = 0;
+					lsreg = 0;
 				end
 				else if(reg1==1) begin
-					assign lodhd = 0;
-					assign lsreg = 1;
+					lodhd = 0;
+					lsreg = 1;
 				end
 				else if(reg1==2) begin
-					assign lodhd = 1;
-					assign lsreg = 0;
+					lodhd = 1;
+					lsreg = 0;
 				end
 				else if(reg1==3) begin
-					assign lodhd = 1;
-					assign lsreg = 1;
+					lodhd = 1;
+					lsreg = 1;
 				end
+//				$display("loding R%b = %b",reg2, regb);
 				$display("LOD");
 			end
 			if(cmd==15) begin // SAV
-				assign write = 0;
-				assign sav = 1;
+				write = 0;
+				sav = 1;
 				if(reg1==1) begin
-					$display("saving reg");
-					assign lsreg = 1;
+//					$display("saving reg");
+					lsreg = 1;
 				end
 				else begin
-					assign lsreg = 0;
+					lsreg = 0;
 				end
-				$display("saving R%b = %b",reg2, regb);
-				assign ramwriteby = regb;
-				assign writeby = regb;
+//				$display("saving R%b = %b",reg2, regb);
+				ramwriteby = regb;
+				writeby = regb;
 				$display("SAV");
 			end
 		end
